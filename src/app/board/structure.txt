@@ -1,0 +1,6 @@
+boards (collection)
+ └─ {userId} (document)
+     └─ columns (subcollection)
+         └─ {columnId} (document)
+             └─ tasks (subcollection)
+                 └─ {taskId} (document)
