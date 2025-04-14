@@ -11,6 +11,9 @@ import {
   query,
   orderBy,
   serverTimestamp,
+  deleteDoc,
+  doc,
+  getDocs,
 } from "firebase/firestore";
 
 export default function BoardPage() {
@@ -18,7 +21,7 @@ export default function BoardPage() {
   const [user, setUser] = useState(null);
   const [columns, setColumns] = useState([]);
   const [newColumnTitle, setNewColumnTitle] = useState("");
-  const [newTasks, setNewTasks] = useState({}); // { columnId: "task text" }
+  const [newTasks, setNewTasks] = useState({});
 
   // Fetch user and subscribe to columns
   useEffect(() => {
@@ -81,6 +84,32 @@ export default function BoardPage() {
     }
   };
 
+  // Delete column and its tasks
+  const handleDeleteColumn = async (columnId) => {
+    if (!user) return;
+
+    try {
+      const tasksRef = collection(
+        db,
+        "boards",
+        user.uid,
+        "columns",
+        columnId,
+        "tasks"
+      );
+      const tasksSnapshot = await getDocs(tasksRef);
+      for (const taskDoc of tasksSnapshot.docs) {
+        await deleteDoc(
+          doc(db, "boards", user.uid, "columns", columnId, "tasks", taskDoc.id)
+        );
+      }
+
+      await deleteDoc(doc(db, "boards", user.uid, "columns", columnId));
+    } catch (error) {
+      console.error("Error deleting column:", error.message);
+    }
+  };
+
   // Logout
   const handleLogout = async () => {
     await signOut(auth);
@@ -89,17 +118,12 @@ export default function BoardPage() {
 
   return (
     <main className="min-h-screen p-6 bg-gray-100 text-gray-900">
-      {/* Background Image */}
       <div
         className="absolute inset-0 h-full w-full bg-cover bg-center z-0"
         style={{ backgroundImage: "url('/background.jpg')" }}
       ></div>
-      {/* Overlay (optional for brightness control)
-      <div className="absolute inset-0 bg-white bg-opacity-70 z-0" /> */}
 
-      {/* Content */}
       <div className="relative z-10">
-        {/* Header */}
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-3xl font-bold">Your Kanban Board</h1>
           <button
@@ -110,7 +134,6 @@ export default function BoardPage() {
           </button>
         </div>
 
-        {/* Column input */}
         <div className="mb-6 flex gap-4">
           <input
             type="text"
@@ -127,7 +150,6 @@ export default function BoardPage() {
           </button>
         </div>
 
-        {/* Columns */}
         <div className="flex gap-6 overflow-x-auto">
           {columns.length === 0 && (
             <p className="text-gray-500">No columns yet. Add one above!</p>
@@ -140,6 +162,7 @@ export default function BoardPage() {
               newTasks={newTasks}
               setNewTasks={setNewTasks}
               handleAddTask={handleAddTask}
+              handleDeleteColumn={handleDeleteColumn}
             />
           ))}
         </div>
@@ -148,10 +171,16 @@ export default function BoardPage() {
   );
 }
 
-function ColumnCard({ column, user, newTasks, setNewTasks, handleAddTask }) {
+function ColumnCard({
+  column,
+  user,
+  newTasks,
+  setNewTasks,
+  handleAddTask,
+  handleDeleteColumn,
+}) {
   const [tasks, setTasks] = useState([]);
 
-  // Listen to tasks in real-time
   useEffect(() => {
     if (!user || !column.id) return;
 
@@ -171,11 +200,29 @@ function ColumnCard({ column, user, newTasks, setNewTasks, handleAddTask }) {
     return () => unsubscribe();
   }, [user, column.id]);
 
-  return (
-    <div className="bg-white rounded-lg shadow-md p-4 w-72 shrink-0">
-      <h2 className="text-xl font-semibold mb-4">{column.title}</h2>
+  const handleDeleteTask = async (taskId) => {
+    try {
+      await deleteDoc(
+        doc(db, "boards", user.uid, "columns", column.id, "tasks", taskId)
+      );
+    } catch (error) {
+      console.error("Error deleting task:", error.message);
+    }
+  };
 
-      {/* Task list */}
+  return (
+    <div className="bg-white rounded-lg shadow-md p-4 w-72 shrink-0 relative">
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-xl font-semibold">{column.title}</h2>
+        <button
+          onClick={() => handleDeleteColumn(column.id)}
+          className="text-red-500 hover:text-red-700 text-sm"
+          title="Delete column"
+        >
+          ✕
+        </button>
+      </div>
+
       <ul className="space-y-2 mb-4">
         {tasks.length === 0 ? (
           <li className="text-gray-400 text-sm">No tasks yet</li>
@@ -183,15 +230,21 @@ function ColumnCard({ column, user, newTasks, setNewTasks, handleAddTask }) {
           tasks.map((task) => (
             <li
               key={task.id}
-              className="bg-gray-100 p-2 rounded text-sm text-gray-800"
+              className="bg-gray-100 p-2 rounded text-sm text-gray-800 flex justify-between items-center"
             >
-              {task.text}
+              <span>{task.text}</span>
+              <button
+                onClick={() => handleDeleteTask(task.id)}
+                className="text-red-400 hover:text-red-600 text-xs ml-2"
+                title="Delete task"
+              >
+                🗑️
+              </button>
             </li>
           ))
         )}
       </ul>
 
-      {/* Add task input */}
       <div className="flex flex-col gap-2">
         <input
           type="text"
